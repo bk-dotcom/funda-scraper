@@ -83,7 +83,7 @@ def fetch_html(url):
     print("[*] Er opent even een Chrome-venster -- dat is normaal.")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         page = browser.new_page()
         try:
             page.goto(url, timeout=PAGE_LOAD_TIMEOUT)
