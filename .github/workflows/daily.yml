@@ -16,4 +16,4 @@ jobs:
       - name: Installeer packages
         run: pip install playwright beautifulsoup4 && playwright install chromium --with-deps
       - name: Draai scraper
-        run: python funda_scraper_phase3.py
+        run: xvfb-run python funda_scraper_phase3.py
