@@ -1,0 +1,19 @@
+name: Funda Dagelijkse Scan
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Installeer packages
+        run: pip install playwright beautifulsoup4 && playwright install chromium
+      - name: Draai scraper
+        run: python funda_scraper_phase3.py
