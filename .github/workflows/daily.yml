@@ -9,11 +9,11 @@ jobs:
   scrape:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Installeer packages
-        run: pip install playwright beautifulsoup4 && playwright install chromium
+        run: pip install playwright beautifulsoup4 && playwright install chromium --with-deps
       - name: Draai scraper
         run: python funda_scraper_phase3.py
