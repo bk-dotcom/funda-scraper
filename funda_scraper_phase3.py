@@ -47,8 +47,9 @@ EMAIL_SUBJECT  = "Funda Investeringskansen onder EUR 300.000"
 SEEN_FILE = Path(__file__).parent / "funda_seen_phase3.json"
 CSV_FILE  = Path(__file__).parent / "funda_investments.csv"
 
-PAGE_LOAD_TIMEOUT = 15_000
-AFTER_LOAD_WAIT   =  2_000
+# FIX 1: Timeout verhoogd van 15s naar 60s
+PAGE_LOAD_TIMEOUT = 60_000
+AFTER_LOAD_WAIT   =  3_000
 READY_SELECTOR    = 'a[href*="/detail/koop/"]'
 
 HUUR_PER_M2 = {
@@ -80,13 +81,37 @@ MAX_HUUR = 880
 
 def fetch_html(url):
     print(f"[*] Browser openen: {url}")
-    print("[*] Er opent even een Chrome-venster -- dat is normaal.")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        page = browser.new_page()
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-blink-features=AutomationControlled",
+            ]
+        )
+
+        # FIX 2: Echte user-agent + viewport zodat Funda ons niet blokkeert
+        context = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1280, "height": 800},
+            locale="nl-NL",
+        )
+        page = context.new_page()
+
+        # Verberg dat we een bot zijn
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        """)
+
         try:
-            page.goto(url, timeout=PAGE_LOAD_TIMEOUT)
+            # FIX 3: Wacht op networkidle zodat de pagina echt klaar is
+            page.goto(url, timeout=PAGE_LOAD_TIMEOUT, wait_until="networkidle")
             page.wait_for_selector(READY_SELECTOR, timeout=PAGE_LOAD_TIMEOUT)
             page.wait_for_timeout(AFTER_LOAD_WAIT)
             print("[*] Pagina geladen.")
@@ -320,7 +345,6 @@ def fmt_eur(amount):
 
 
 def build_html_email(listings):
-    # Sorteer op beste netto rendement
     sorted_listings = sorted(
         listings,
         key=lambda x: x.get("net_yield") or 0,
@@ -334,19 +358,14 @@ def build_html_email(listings):
         verdict_emoji = l.get("verdict_emoji", "")
 
         cards += f"""
-        <!-- Woningkaart -->
         <table width="100%" cellpadding="0" cellspacing="0" border="0"
                style="max-width:600px; margin:0 auto 16px auto;
                       background:#ffffff; border-radius:12px;
                       box-shadow:0 2px 8px rgba(0,0,0,0.08);
                       overflow:hidden;">
-
-          <!-- Kleurstrip bovenaan gebaseerd op oordeel -->
           <tr>
             <td style="background:{verdict_color}; height:6px; font-size:0;">&nbsp;</td>
           </tr>
-
-          <!-- Adres + badge -->
           <tr>
             <td style="padding:16px 16px 8px 16px;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0">
@@ -371,8 +390,6 @@ def build_html_email(listings):
               </table>
             </td>
           </tr>
-
-          <!-- Prijs + oppervlak -->
           <tr>
             <td style="padding:4px 16px 12px 16px;">
               <span style="font-size:20px; font-weight:bold; color:#E37222;">
@@ -384,20 +401,15 @@ def build_html_email(listings):
               </span>
             </td>
           </tr>
-
-          <!-- Divider -->
           <tr>
             <td style="padding:0 16px;">
               <div style="border-top:1px solid #f0f0f0;"></div>
             </td>
           </tr>
-
-          <!-- Rendement grid: 2 kolommen -->
           <tr>
             <td style="padding:12px 16px;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <!-- Huur -->
                   <td width="50%" style="vertical-align:top; padding-right:8px;">
                     <div style="font-size:11px; color:#999; text-transform:uppercase;
                                 letter-spacing:0.5px; margin-bottom:2px;">
@@ -408,7 +420,6 @@ def build_html_email(listings):
                       font-weight:normal; color:#888;">/mnd</span>
                     </div>
                   </td>
-                  <!-- Rendement -->
                   <td width="50%" style="vertical-align:top; padding-left:8px;">
                     <div style="font-size:11px; color:#999; text-transform:uppercase;
                                 letter-spacing:0.5px; margin-bottom:2px;">
@@ -426,13 +437,10 @@ def build_html_email(listings):
               </table>
             </td>
           </tr>
-
-          <!-- Financiering -->
           <tr>
             <td style="padding:0 16px 12px 16px;">
               <table width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <!-- Eigen geld -->
                   <td width="50%" style="vertical-align:top; padding-right:8px;">
                     <div style="font-size:11px; color:#999; text-transform:uppercase;
                                 letter-spacing:0.5px; margin-bottom:2px;">
@@ -443,7 +451,6 @@ def build_html_email(listings):
                     </div>
                     <div style="font-size:11px; color:#aaa;">incl. kosten koper</div>
                   </td>
-                  <!-- Hypotheek -->
                   <td width="50%" style="vertical-align:top; padding-left:8px;">
                     <div style="font-size:11px; color:#999; text-transform:uppercase;
                                 letter-spacing:0.5px; margin-bottom:2px;">
@@ -457,8 +464,6 @@ def build_html_email(listings):
               </table>
             </td>
           </tr>
-
-          <!-- Bekijk knop -->
           <tr>
             <td style="padding:0 16px 16px 16px;">
               <a href="{l['listing_url']}"
@@ -469,7 +474,6 @@ def build_html_email(listings):
               </a>
             </td>
           </tr>
-
         </table>"""
 
     timestamp = datetime.now().strftime("%d %B %Y om %H:%M")
@@ -483,8 +487,6 @@ def build_html_email(listings):
 </head>
 <body style="margin:0; padding:0; background:#f2f2f7;
              font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
-
-  <!-- Header -->
   <table width="100%" cellpadding="0" cellspacing="0" border="0">
     <tr>
       <td style="background:#E37222; padding:24px 16px; text-align:center;">
@@ -497,8 +499,6 @@ def build_html_email(listings):
       </td>
     </tr>
   </table>
-
-  <!-- Uitleg -->
   <table width="100%" cellpadding="0" cellspacing="0" border="0">
     <tr>
       <td style="background:#fff3cd; padding:10px 16px;
@@ -507,8 +507,6 @@ def build_html_email(listings):
       </td>
     </tr>
   </table>
-
-  <!-- Kaarten -->
   <table width="100%" cellpadding="0" cellspacing="0" border="0">
     <tr>
       <td style="padding:16px 8px;">
@@ -516,8 +514,6 @@ def build_html_email(listings):
       </td>
     </tr>
   </table>
-
-  <!-- Footer -->
   <table width="100%" cellpadding="0" cellspacing="0" border="0">
     <tr>
       <td style="padding:16px; text-align:center; font-size:11px; color:#999;">
@@ -528,7 +524,6 @@ def build_html_email(listings):
       </td>
     </tr>
   </table>
-
 </body>
 </html>"""
 
